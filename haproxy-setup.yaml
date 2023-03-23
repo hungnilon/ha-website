@@ -1,0 +1,63 @@
+---
+- name: Setup HAProxy
+  hosts: havm
+  become: yes
+  tasks:
+    - name: Add repo HAProxy LTS version
+      apt_repository:
+        repo: ppa:vbernat/haproxy-2.6
+    - name: Install HAProxy LTS version
+      apt:
+        name: "{{ item }}"
+        update_cache: yes
+        state: present
+      loop:
+        - haproxy
+        - keepalived
+#IP forwarding
+    - name: Enable IP forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: true
+    - name: Enable HAProxy and Keepalived to bind to non-local IP address
+      sysctl:
+        name: net.ipv4.ip_nonlocal_bind
+        value: '1'
+        sysctl_set: true
+#Update config KeepAlived DB
+    - name: Write check service script
+      template:
+        src: templates/chk_haproxy.sh.j2
+        dest: /etc/keepalived/chk_haproxy.sh
+        owner: root
+        group: root
+        mode: '0755'
+    - name: Update KeepAlived - Master
+      template:
+        src: templates/keepalived.conf-master.j2
+        dest: /etc/keepalived/keepalived.conf
+      when: inventory_hostname == 'haproxy-db-01'
+    - name: Update KeepAlived - Backup
+      template:
+        src: templates/keepalived.conf-backup.j2
+        dest: /etc/keepalived/keepalived.conf
+      when: inventory_hostname == 'haproxy-db-02'
+    - name: Restart KeepAlived
+      service:
+        name: keepalived
+        state: restarted
+        enabled: true
+#Update config Database's HAProxy
+    - name: Update Config for HAProxy Database
+      template:
+        src: templates/haproxy-db.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+      when: inventory_hostname in groups["haproxy-db"]
+    - name: Restart servie Haproxy Database
+      service:
+        name: haproxy
+        state: restarted
+        enabled: true
+      when: inventory_hostname in groups["haproxy-db"]
+#Update config Web Server's HAProxy

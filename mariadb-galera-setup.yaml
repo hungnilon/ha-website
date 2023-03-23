@@ -1,0 +1,77 @@
+---
+- name: Setup Database Cluster
+  hosts: db
+  become: yes
+  tasks:
+    - name: Prerequire
+      apt_key:
+        url: https://mariadb.org/mariadb_release_signing_key.asc
+        state: present
+    - name: Add repo MariaDB
+      apt_repository:
+        repo: "deb [arch=amd64,arm64,ppc64el] https://mariadb.mirror.liquidtelecom.com/repo/10.11.2/ubuntu jammy main"
+        state: present
+    - name: Install MariaDB
+      apt:
+        name: "{{ item }}"
+        update_cache: yes
+        state: present
+      loop:
+        - mariadb-server
+        - rsync
+        - python3-mysqldb
+    - name: Start service MariaDB
+      service:
+        name: mariadb
+        state: started
+
+    - name: Sets the root password
+      mysql_user:
+        user: root
+        password: "{{ mysql_root_password }}"
+        check_implicit_admin: true
+    - name: Create .my.cnf
+      template:
+        src: "dotmy.cnf.j2"
+        dest: "/root/.my.cnf"
+        owner: root
+        group: root
+        mode: 0600
+    - name: Removes all anonymous user accounts
+      mysql_user:
+        name: ''
+        host_all: true
+        state: absent
+    - name: Configuring Galera Cluster
+      template:
+        src: templates/50-server.cnf.j2
+        dest: /etc/mysql/mariadb.conf.d/50-server.cnf
+    - name: Stop MariaDB
+      service:
+        name: mariadb
+        state: stopped
+    - name: Init Cluster
+      shell:
+        galera_new_cluster
+      when: inventory_hostname == 'db01'
+    - name: Start remaining nodes
+      service:
+        name: mariadb
+        state: restarted
+      when: inventory_hostname != 'db01'
+    - name: Set safe to bootstrap
+      shell:
+        "sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/g' /var/lib/mysql/grastate.dat"
+
+    - name: Cron for main DB after reboot cluster
+      cron:
+        name: "After reboot cluster"
+        special_time: reboot
+        job: "sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/g' /var/lib/mysql/grastate.dat && /etc/init.d/mariadb start --wsrep-new-cluster"
+      when: inventory_hostname == 'db01'
+    - name: Cron for remaining DB after reboot cluster
+      cron:
+        name: "After reboot cluster"
+        special_time: reboot
+        job: "systemctl start mariadb"
+      when: inventory_hostname != 'db01'

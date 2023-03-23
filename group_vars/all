@@ -1,0 +1,12 @@
+haproxy-web-01:
+haproxy-web-02:
+haproxy-db-01: 172.31.23.179
+haproxy-db-02: 172.31.21.253
+web01:
+web02:
+db01: 172.31.24.0
+db02: 172.31.20.209
+db03: 172.31.18.46
+virtual_ipaddress: 172.31.26.112
+
+mysql_root_password: nginx@@@123

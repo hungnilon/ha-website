@@ -1,0 +1,9 @@
+listen galera
+    bind {{virtual_ipaddress}}:3306
+    balance source
+    mode tcp
+    option tcpka
+    option mysql-check user haproxy
+    server db01 {{db01}}:3306 check weight 1
+    server db02 {{db02}}:3306 check weight 1
+    server db03 {{db03}}:3306 check weight 1
